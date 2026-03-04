@@ -1,0 +1,38 @@
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Environment variables (never commit API keys)
+.env
+.env.local
+
+# Temporary files
+*.tmp
+*.bak
+*.log
+
+# Crawl data (users should not commit their own crawl exports)
+*.csv
+!examples/*.csv
