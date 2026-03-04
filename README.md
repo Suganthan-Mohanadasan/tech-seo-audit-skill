@@ -59,7 +59,7 @@ For developers who prefer working in the terminal.
 
 ```bash
 # Clone the repository
-git clone https://github.com/snippet-digital/technical-seo-audit-skill.git
+git clone https://github.com/Suganthan-Mohanadasan/tech-seo-audit-skill.git
 
 # Project level installation
 mkdir -p .claude/skills/technical-seo-audit

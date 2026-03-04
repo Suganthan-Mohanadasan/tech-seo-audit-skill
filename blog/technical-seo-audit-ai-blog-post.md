@@ -129,7 +129,7 @@ This is the recommended route for most SEO professionals. No terminal required.
 
 **Step 1: Download the Skill Folder**
 
-Go to the GitHub repository at `https://github.com/snippet-digital/technical-seo-audit-skill` and click **Code > Download ZIP**. Extract the ZIP file somewhere on your computer.
+Go to the GitHub repository at `https://github.com/Suganthan-Mohanadasan/tech-seo-audit-skill` and click **Code > Download ZIP**. Extract the ZIP file somewhere on your computer.
 
 `[📸 SCREENSHOT: GitHub repository page showing the green "Code" button and "Download ZIP" option]`
 
@@ -175,7 +175,7 @@ If you prefer working in the terminal or already use Claude Code for development
 **Step 1: Clone the Repository**
 
 ```bash
-git clone https://github.com/snippet-digital/technical-seo-audit-skill.git
+git clone https://github.com/Suganthan-Mohanadasan/tech-seo-audit-skill.git
 ```
 
 **Step 2: Create the Skills Directory**
