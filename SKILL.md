@@ -73,9 +73,32 @@ Ask the user:
 
 Then execute the crawl, wait for completion, and normalise the returned data into the same internal schema.
 
-### Path C: Hybrid approach
+### Path C: Hybrid / Multi-Source Merge
 
-Some users will upload partial data (e.g. Screaming Frog export) and want the skill to supplement it with live checks via API. This is perfectly valid. Merge the datasets, deduplicate by URL, and prefer the freshest data where conflicts exist.
+Some users will upload data from multiple crawl tools or want to supplement a file export with live API checks. The skill handles this through a dedicated merge pipeline.
+
+**How multi-source merging works:**
+
+The `merge_datasets()` function in `scripts/analyse_crawl.py` resolves conflicts and fills gaps using a three-step strategy:
+
+1. **Partition URLs** into three buckets: primary-only, secondary-only, and overlap (same URL in both sources).
+2. **Resolve conflicts** on overlapping URLs. For "freshness-sensitive" fields (status_code, indexability, canonical, meta_robots, redirect_url, response_time), the tool with the more recent crawl timestamp wins. If timestamps are unavailable, the primary source takes precedence.
+3. **Backfill gaps.** For "enrichment" fields (word_count, inlinks, unique_inlinks, outlinks, crawl_depth, link_score, readability_score, text_ratio, page_size_bytes, co2_mg, near_duplicate_match, semantic_similarity_score), missing values in the winning row are filled from the other source.
+
+Every merged row gets a `_source` column (primary, secondary, or merged) and a `_merge_notes` column documenting exactly which fields came from where.
+
+**CLI usage:**
+```bash
+python analyse_crawl.py \
+  --input screaming_frog.csv \
+  --secondary sitebulb.csv \
+  --merge-strategy freshest \
+  --output results.json
+```
+
+Merge strategies:
+  - `freshest` (default): Most recent timestamp wins on conflict fields
+  - `primary`: Primary source always wins on conflicts, secondary only backfills gaps
 
 ---
 

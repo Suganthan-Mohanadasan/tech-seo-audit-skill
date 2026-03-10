@@ -1,157 +1,172 @@
-# Technical SEO Audit Skill for Claude
+# Technical SEO Audit Skill
 
-An open source skill for [Claude](https://claude.ai) (Anthropic's AI) that transforms raw crawl data from any SEO tool into a fully prioritised, business impact scored audit report and actionable spreadsheet.
-
-Built and maintained by [Snippet Digital](https://snippet.digital), a specialist SEO agency based in the West Midlands, UK.
+A comprehensive technical SEO audit skill that analyses crawl data, identifies issues across 10 audit categories, prioritises findings by actual business impact, and produces a detailed Markdown report alongside an actionable XLSX spreadsheet.
 
 ## What It Does
 
-This skill sits on top of whatever crawl data you already have (Screaming Frog, Sitebulb, Firecrawl, Ahrefs Site Audit, or any CSV with URL and status data) and handles the analysis, prioritisation, and reporting that typically takes hours of manual work.
+This skill takes crawl data from any major SEO tool (or fetches it live via API) and runs a full technical audit. Unlike generic audit checklists, every issue is scored against three dimensions: SEO impact, business impact, and fix effort. The result is a prioritised action plan that surfaces quick wins and high value fixes first, tailored to the specific platform and business model.
 
-Specifically, it:
-
-1. **Auto detects your crawl tool** and normalises column formats into a standard schema
-2. **Identifies your platform** (WordPress, Shopify, Magento, custom) and site type automatically
-3. **Runs analysis across 10 audit categories**: crawlability, indexability, on page elements, site architecture, performance, mobile readiness, structured data, security, international SEO, and AI/future readiness
-4. **Scores every issue on three dimensions**: SEO Impact (1 to 10), Business Impact (1 to 10), and Fix Effort (1 to 10)
-5. **Generates two deliverables**: a comprehensive Markdown report with executive summary and strategic recommendations, plus an XLSX spreadsheet with every issue, priority score, affected URLs, and an implementation timeline
-
-The priority scoring formula ensures high impact, easy to fix issues surface first:
+## Directory Structure
 
 ```
-Priority Score = (SEO Impact x 0.4) + (Business Impact x 0.4) + ((10 - Fix Effort) x 0.2)
+technical-seo-audit/
+  SKILL.md                          Core skill instructions (the brain)
+  README.md                         This file
+  references/
+    data-ingestion.md               Column mappings, schema, tool detection
+    analysis-modules.md             All 10 audit categories and their checks
+    impact-scoring.md               Business impact scoring methodology
+    api-crawling.md                 Firecrawl, SF CLI, DataForSEO integration
+  scripts/
+    analyse_crawl.py                Python analysis engine (1,295 lines)
+  assets/                           Reserved for templates and output assets
 ```
 
-## Installation
+## Supported Data Sources
 
-### Option A: Claude Desktop (Cowork Mode)
+### File Uploads (Path A)
 
-This is the simplest route for most users.
+The skill auto-detects the source tool from CSV headers and normalises columns into a standard internal schema.
 
-1. Download this repository as a ZIP (click **Code > Download ZIP** above)
-2. Extract the ZIP file
-3. Open Claude Desktop and switch to **Cowork mode**
-4. Select a working folder on your machine
-5. Copy the `technical-seo-audit` folder (the one containing `SKILL.md`) into the `.skills/skills/` directory inside your selected working folder:
+| Tool             | Typical Files                      |
+|------------------|------------------------------------|
+| Screaming Frog   | internal_html.csv, internal_all.csv |
+| Sitebulb         | urls.csv                           |
+| Ahrefs Site Audit| pages.csv                          |
+| Generic CSV      | Any CSV with URL + status columns  |
 
-```
-your-selected-folder/
-└── .skills/
-    └── skills/
-        └── technical-seo-audit/
-            ├── SKILL.md
-            ├── references/
-            │   ├── analysis-modules.md
-            │   ├── impact-scoring.md
-            │   ├── api-crawling.md
-            │   └── data-ingestion.md
-            └── scripts/
-                └── analyse_crawl.py
-```
+### API Crawling (Path B)
 
-The `.skills` folder may be hidden by default. On macOS, press `Cmd + Shift + .` in Finder to reveal hidden folders. On Windows, enable "Show hidden items" in File Explorer's View tab.
+For sites without existing crawl data, the skill can fetch data live.
 
-6. Start a new conversation and say: "Run a technical SEO audit on [your domain]"
+| API              | Notes                                         |
+|------------------|-----------------------------------------------|
+| Firecrawl        | Recommended. Full JS rendering, clean output  |
+| ScreamingFrog CLI| Requires local licence and CLI access         |
+| DataForSEO       | Per-page on-page analysis via MCP tools       |
+| Generic REST     | Extensible adapter pattern for custom crawlers|
 
-### Option B: Claude Code CLI
+### Multi-Source Merge (Path C)
 
-For developers who prefer working in the terminal.
+When data from two sources is available, the merge pipeline resolves conflicts using a freshness-first strategy and backfills gaps from the secondary source. Every merged row is tagged with provenance metadata so you always know where the data came from.
 
 ```bash
-# Clone the repository
-git clone https://github.com/Suganthan-Mohanadasan/tech-seo-audit-skill.git
-
-# Project level installation
-mkdir -p .claude/skills/technical-seo-audit
-cp -r technical-seo-audit-skill/* .claude/skills/technical-seo-audit/
-
-# Or global installation (available across all projects)
-mkdir -p ~/.claude/skills/technical-seo-audit
-cp -r technical-seo-audit-skill/* ~/.claude/skills/technical-seo-audit/
+python scripts/analyse_crawl.py \
+  --input screaming_frog.csv \
+  --secondary sitebulb.csv \
+  --merge-strategy freshest \
+  --output results.json
 ```
 
-Then launch Claude Code and type: "Run a technical SEO audit"
+## The 10 Audit Categories
 
-### Optional: API Access
+1. **Crawlability and Accessibility** : Status codes, redirects (chains, loops), crawl depth, orphan pages, URL structure, response times, robots.txt, XML sitemaps
+2. **Indexability and Index Management** : Indexability distribution, canonical audit, meta robots directives, pagination, duplicate content
+3. **On-Page SEO Elements** : Title tags, meta descriptions, heading hierarchy, content quality, keyword cannibalisation, image optimisation
+4. **Site Architecture and Internal Linking** : Link distribution, content silos, navigation assessment, breadcrumbs, faceted navigation
+5. **Performance and Core Web Vitals** : Page weight, response times, CWV guidance (LCP, INP, CLS), sustainability metrics
+6. **Mobile and Rendering** : Mobile signals, viewport, JS rendering concerns, AMP
+7. **Structured Data and Schema** : Schema presence, missing opportunities by page type, deprecated schema warnings
+8. **Security and Protocol** : HTTPS implementation, mixed content, security headers
+9. **International SEO** : Hreflang audit, language consistency, regional URL structure
+10. **AI and Future Readiness** : llms.txt, content extractability, semantic HTML, structured data completeness
 
-To pull supplementary data from Ahrefs or DataForSEO, set environment variables:
+## Business Impact Scoring
+
+Every issue is scored on three dimensions:
+
+| Dimension       | Weight | What It Measures                          |
+|-----------------|--------|-------------------------------------------|
+| SEO Impact      | 40%    | Effect on search engine visibility        |
+| Business Impact | 40%    | Revenue, leads, or business value at risk |
+| Fix Effort      | 20%    | Inverse of effort (easy fixes score higher)|
+
+**Priority Score** = (SEO Impact x 0.4) + (Business Impact x 0.4) + ((10 minus Fix Effort) x 0.2)
+
+Priority bands:
+
+| Score     | Band          | Timeline              |
+|-----------|---------------|-----------------------|
+| 8.0+      | Critical      | Fix this week         |
+| 6.0 to 7.9| High         | Fix within 2 weeks    |
+| 4.0 to 5.9| Medium       | Fix within 1 month    |
+| 2.0 to 3.9| Low          | Fix within quarter    |
+| Below 2.0 | Informational | Address when convenient|
+
+Fix effort scores are calibrated per platform (e.g. adding redirects is effort 2 on Shopify, effort 4 on a custom build).
+
+## Platform Awareness
+
+The skill auto-detects the CMS or framework from URL patterns and meta signatures, then tailors every recommendation accordingly.
+
+| Platform    | Detection Signals                              |
+|-------------|------------------------------------------------|
+| Shopify     | /collections/, /products/, cdn.shopify.com     |
+| WordPress   | /wp-content/, /wp-admin/, /wp-json/            |
+| Wix         | wixsite.com, static.wixstatic.com              |
+| Squarespace | squarespace.com, /s/                           |
+| Magento     | /catalog/product/, /checkout/cart/              |
+| Next.js     | /_next/, __next data attributes                |
+| Custom      | No known signatures matched                    |
+
+## Output Deliverables
+
+### Markdown Report
+
+A structured report containing: executive summary with overall health score, category-by-category health breakdown, issues grouped by priority band, a dedicated quick wins section, strategic recommendations, and an appendix referencing the spreadsheet.
+
+### XLSX Spreadsheet (7 sheets)
+
+1. **Executive Dashboard** : Health scores, issue counts, priority distribution
+2. **All Issues** : Every issue with scores, affected URL counts, fix instructions
+3. **URL-Level Detail** : Per-URL data with all associated issues
+4. **Quick Wins** : High impact, low effort items filtered for fast action
+5. **Redirect Map** : All redirects with chains mapped out
+6. **Duplicate Content** : Near-duplicate page clusters
+7. **Action Plan** : Timeline-based implementation roadmap
+
+## Running the Analysis Script Directly
 
 ```bash
-export AHREFS_API_KEY="your_ahrefs_api_key_here"
-export DATAFORSEO_LOGIN="your_login_here"
-export DATAFORSEO_PASSWORD="your_password_here"
+# Single source
+python scripts/analyse_crawl.py \
+  --input path/to/crawl_data.csv \
+  --output results.json \
+  --platform shopify
+
+# Multi-source merge
+python scripts/analyse_crawl.py \
+  --input primary.csv \
+  --secondary secondary.csv \
+  --merge-strategy freshest \
+  --output results.json
 ```
 
-## Supported Crawl Tools
+The script outputs a JSON file containing all findings, health scores, and issue details which the skill then uses to generate the report and spreadsheet.
 
-| Tool | Typical Files | Auto Detected |
-|------|--------------|---------------|
-| Screaming Frog | `internal_html.csv`, `internal_all.csv` | Yes |
-| Sitebulb | `urls.csv`, `links.csv`, `hints.csv` | Yes |
-| Ahrefs Site Audit | `pages.csv`, `issues.csv` | Yes |
-| Firecrawl | API response (JSON/Markdown) | Yes |
-| Generic CSV | Any CSV with URL + status columns | Yes (header matching) |
+## Dependencies
 
-## Audit Categories
+The analysis script requires:
 
-The skill analyses your site across 10 categories:
+| Package         | Purpose                              |
+|-----------------|--------------------------------------|
+| pandas          | Data processing and analysis         |
+| openpyxl        | XLSX generation (used by pandas)     |
+| beautifulsoup4  | HTML parsing for API crawl data      |
+| firecrawl-py    | Firecrawl API integration (optional) |
 
-1. **Crawlability and Accessibility**: Robots.txt, XML sitemaps, status codes, redirects, crawl depth, orphan pages
-2. **Indexability and Index Management**: Canonical tags, meta robots, pagination, duplicate content
-3. **On Page SEO Elements**: Titles, meta descriptions, heading hierarchy, content quality, internal linking, image optimisation
-4. **Site Architecture and Internal Linking**: Depth analysis, click depth, navigation structure, content silos
-5. **Performance and Core Web Vitals**: Page size, response times, resource optimisation
-6. **Mobile and Rendering**: Responsive signals, viewport, JavaScript rendering
-7. **Structured Data and Schema**: Schema presence, missing opportunities by page type
-8. **Security and Protocol**: HTTPS, mixed content, security headers
-9. **International SEO**: Hreflang, language targeting
-10. **AI and Future Readiness**: llms.txt, content extractability, semantic HTML
-
-## Output
-
-The skill produces two deliverables:
-
-1. **Markdown Report**: Executive summary, health score breakdown, categorised findings (Critical/High/Medium/Low), quick wins, and strategic recommendations
-2. **XLSX Spreadsheet**: Executive dashboard, all issues with priority scores, quick wins tab, and a week by week action plan
-
-## Example
-
-We ran this skill against a live client site and it identified 20 issues across all categories, including a canonical tag misconfiguration on a high traffic page that was actively suppressing rankings. The entire audit, from data gathering to finished deliverables, took under 10 minutes.
-
-Read the full write up: [We Open Sourced Our Technical SEO Audit Process](https://snippet.digital/blog/technical-seo-audit-ai-process/)
-
-## Repository Structure
-
-```
-technical-seo-audit-skill/
-├── README.md
-├── LICENCE
-├── .gitignore
-├── SKILL.md                          # Main skill instructions
-├── references/
-│   ├── analysis-modules.md           # Detailed check specifications for all 10 categories
-│   ├── impact-scoring.md             # Business impact scoring methodology
-│   ├── api-crawling.md               # API integration documentation
-│   └── data-ingestion.md             # Column mapping and normalisation logic
-├── scripts/
-│   └── analyse_crawl.py              # Automated crawl data processing
-├── examples/
-│   ├── ukmodels-technical-seo-audit.md    # Example audit report
-│   └── ukmodels-technical-seo-audit.xlsx  # Example audit spreadsheet
-└── blog/
-    └── technical-seo-audit-ai-blog-post.md  # Companion blog post
+Install with:
+```bash
+pip install pandas openpyxl beautifulsoup4 firecrawl-py --break-system-packages
 ```
 
-## Contributing
+## How the Skill Triggers
 
-Contributions, feedback, and feature requests are welcome. Please open an issue or submit a pull request.
+The skill activates when a user mentions any of the following: technical SEO audit, site audit, crawl audit, SEO health check, crawlability issues, indexability problems, redirect chains, orphan pages, duplicate content, site architecture review, Core Web Vitals, structured data audit, or uploads a CSV from any crawl tool and asks for analysis.
 
-## Licence
+## Version History
 
-MIT Licence. See [LICENCE](LICENCE) for details.
-
-## About Snippet Digital
-
-[Snippet Digital](https://snippet.digital) is a specialist SEO agency focused on technical SEO, link audits, and reputation management. We have been integrating AI into our workflows since 2024 and are committed to sharing tools and methodologies that push the industry forward.
-
-[Get in touch](https://snippet.digital/contact/) if you would like us to run a technical SEO audit for your site.
+| Date       | Change                                                    |
+|------------|-----------------------------------------------------------|
+| 2026-03-04 | Initial skill creation with full 10-category audit engine |
+| 2026-03-10 | Added multi-source merge pipeline with freshness-first conflict resolution and backfill strategy |

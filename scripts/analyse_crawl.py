@@ -6,7 +6,7 @@ This script processes normalised crawl data and runs all audit checks
 across the 10 categories defined in the analysis-modules reference.
 
 Usage:
-    python analyse_crawl.py --input <normalised_csv> --output <results_json> [--platform <platform>]
+    python analyse_crawl.py --input <normalised_csv> --output <results_json> [--platform <platform>] [--secondary <second_csv>]
 """
 
 import pandas as pd
@@ -148,6 +148,203 @@ def ensure_numeric(df, cols):
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors="coerce")
     return df
+
+
+# ---------------------------------------------------------------------------
+# Multi-source merge
+# ---------------------------------------------------------------------------
+
+# Fields that should always prefer the freshest value when merging
+FRESHNESS_FIELDS = [
+    "status_code", "status_text", "title", "title_length", "title_pixel_width",
+    "meta_description", "meta_description_length", "h1", "h1_length", "h2",
+    "canonical", "meta_robots", "x_robots_tag", "indexability", "indexability_reason",
+    "word_count", "text_ratio", "page_size_bytes", "transferred_bytes",
+    "total_transferred_bytes", "response_time", "redirect_url", "redirect_type",
+    "language", "hash",
+]
+
+# Fields where we backfill from the secondary source if missing in primary
+BACKFILL_FIELDS = [
+    "link_score", "near_duplicate_match", "near_duplicate_count",
+    "semantic_similarity_url", "semantic_similarity_score", "semantic_similar_count",
+    "semantic_relevance_score", "spelling_errors", "grammar_errors",
+    "readability_score", "readability_level", "sentence_count", "co2_mg",
+    "carbon_rating", "crawl_depth", "folder_depth", "inlinks", "unique_inlinks",
+    "outlinks", "external_outlinks", "gsc_clicks", "gsc_impressions", "gsc_ctr",
+    "gsc_position",
+]
+
+
+def _parse_timestamp(ts):
+    """Try to parse a crawl timestamp into a comparable datetime."""
+    if pd.isna(ts) or ts == "":
+        return None
+    try:
+        return pd.to_datetime(ts)
+    except Exception:
+        return None
+
+
+def merge_datasets(primary_df, secondary_df,
+                   primary_tool="unknown", secondary_tool="unknown",
+                   strategy="freshest"):
+    """
+    Merge two crawl datasets that have already been normalised to the internal schema.
+
+    Precedence rules
+    ----------------
+    1. **Deduplicate on URL.** Rows are matched by the ``url`` column.
+    2. **Freshness-first.** For every URL that appears in both datasets the
+       row from the source with the more recent ``crawl_timestamp`` wins for
+       all ``FRESHNESS_FIELDS``.  If timestamps are unavailable the
+       ``strategy`` parameter controls the tie-break:
+       - ``"freshest"`` (default) — prefer the secondary source on the
+         assumption it was fetched more recently (typical when supplementing
+         an older export with a live API crawl).
+       - ``"primary"`` — always prefer the primary source.
+    3. **Backfill gaps.** Fields in ``BACKFILL_FIELDS`` that are missing or
+       NaN in the winning row are filled from the losing row so that no data
+       is thrown away unnecessarily.
+    4. **URLs unique to either source are kept as-is** so the merged dataset
+       is a superset of both inputs.
+
+    Parameters
+    ----------
+    primary_df : pd.DataFrame
+        The first (usually file-uploaded) dataset, already normalised.
+    secondary_df : pd.DataFrame
+        The second (usually API-fetched) dataset, already normalised.
+    primary_tool : str
+        Name of the tool that produced the primary data (for logging).
+    secondary_tool : str
+        Name of the tool that produced the secondary data (for logging).
+    strategy : str
+        Tie-break strategy when timestamps are absent.  One of
+        ``"freshest"`` or ``"primary"``.
+
+    Returns
+    -------
+    pd.DataFrame
+        Merged and deduplicated dataset.
+    dict
+        Merge report with counts and diagnostics.
+    """
+    if "url" not in primary_df.columns or "url" not in secondary_df.columns:
+        raise ValueError("Both datasets must contain a 'url' column after normalisation.")
+
+    # Tag the source so we can trace provenance after the merge
+    primary_df = primary_df.copy()
+    secondary_df = secondary_df.copy()
+    primary_df["_source"] = primary_tool or "primary"
+    secondary_df["_source"] = secondary_tool or "secondary"
+
+    # Parse timestamps if available
+    for df_ref in (primary_df, secondary_df):
+        if "crawl_timestamp" in df_ref.columns:
+            df_ref["_ts"] = df_ref["crawl_timestamp"].apply(_parse_timestamp)
+        else:
+            df_ref["_ts"] = None
+
+    # Split into three buckets: primary-only, secondary-only, overlap
+    primary_urls = set(primary_df["url"].dropna())
+    secondary_urls = set(secondary_df["url"].dropna())
+    overlap_urls = primary_urls & secondary_urls
+    primary_only_urls = primary_urls - overlap_urls
+    secondary_only_urls = secondary_urls - overlap_urls
+
+    # --- Non-overlapping rows pass straight through ---
+    primary_only = primary_df[primary_df["url"].isin(primary_only_urls)]
+    secondary_only = secondary_df[secondary_df["url"].isin(secondary_only_urls)]
+
+    # --- Resolve overlapping rows ---
+    merged_overlap_rows = []
+    primary_overlap = primary_df[primary_df["url"].isin(overlap_urls)].set_index("url")
+    secondary_overlap = secondary_df[secondary_df["url"].isin(overlap_urls)].set_index("url")
+
+    # Handle duplicate URLs within a single source by keeping first occurrence
+    primary_overlap = primary_overlap[~primary_overlap.index.duplicated(keep="first")]
+    secondary_overlap = secondary_overlap[~secondary_overlap.index.duplicated(keep="first")]
+
+    for url in overlap_urls:
+        if url not in primary_overlap.index or url not in secondary_overlap.index:
+            continue
+
+        p_row = primary_overlap.loc[url]
+        s_row = secondary_overlap.loc[url]
+
+        # Decide which row wins for freshness fields
+        p_ts = p_row.get("_ts")
+        s_ts = s_row.get("_ts")
+
+        if p_ts is not None and s_ts is not None:
+            winner, loser = (s_row, p_row) if s_ts > p_ts else (p_row, s_row)
+        elif strategy == "freshest":
+            # No timestamps — assume secondary is newer (typical API supplement)
+            winner, loser = s_row, p_row
+        else:
+            winner, loser = p_row, s_row
+
+        # Start with the winner row
+        merged = winner.copy()
+
+        # Backfill missing fields from loser
+        all_backfill = BACKFILL_FIELDS + [
+            c for c in loser.index
+            if c not in FRESHNESS_FIELDS and c not in BACKFILL_FIELDS
+            and c not in ("_source", "_ts", "url")
+        ]
+        for field in all_backfill:
+            if field in loser.index:
+                winner_val = merged.get(field)
+                if pd.isna(winner_val) or winner_val == "" or winner_val is None:
+                    merged[field] = loser[field]
+
+        # Record provenance
+        winner_source = winner.get("_source", "unknown")
+        loser_source = loser.get("_source", "unknown")
+        merged["_source"] = f"{winner_source} (winner) + {loser_source} (backfill)"
+
+        merged_overlap_rows.append(merged)
+
+    # Combine everything
+    parts = [primary_only, secondary_only]
+    if merged_overlap_rows:
+        overlap_df = pd.DataFrame(merged_overlap_rows)
+        # The URL was used as the index during lookup; restore it as a column
+        if "url" not in overlap_df.columns and overlap_df.index.name == "url":
+            overlap_df = overlap_df.reset_index()
+        elif "url" not in overlap_df.columns:
+            overlap_df = overlap_df.reset_index()
+            if "index" in overlap_df.columns:
+                overlap_df = overlap_df.rename(columns={"index": "url"})
+        parts.append(overlap_df)
+
+    result = pd.concat(parts, ignore_index=True, sort=False)
+
+    # Clean up internal columns
+    result = result.drop(columns=["_ts"], errors="ignore")
+
+    # Build merge report
+    report = {
+        "primary_tool": primary_tool,
+        "secondary_tool": secondary_tool,
+        "primary_urls_total": len(primary_urls),
+        "secondary_urls_total": len(secondary_urls),
+        "overlap_urls": len(overlap_urls),
+        "primary_only_urls": len(primary_only_urls),
+        "secondary_only_urls": len(secondary_only_urls),
+        "merged_total_urls": len(result),
+        "strategy": strategy,
+        "timestamps_available": {
+            "primary": "crawl_timestamp" in primary_df.columns
+                       and primary_df["crawl_timestamp"].notna().any(),
+            "secondary": "crawl_timestamp" in secondary_df.columns
+                         and secondary_df["crawl_timestamp"].notna().any(),
+        },
+    }
+
+    return result, report
 
 
 # ---------------------------------------------------------------------------
@@ -1024,29 +1221,68 @@ def run_full_audit(df, platform="auto"):
 
 def main():
     parser = argparse.ArgumentParser(description="Technical SEO Audit Analysis")
-    parser.add_argument("--input", required=True, help="Path to crawl CSV file")
+    parser.add_argument("--input", required=True, help="Path to primary crawl CSV file")
+    parser.add_argument("--secondary", default=None, help="Path to secondary crawl CSV/JSON to merge (optional)")
+    parser.add_argument("--merge-strategy", default="freshest", choices=["freshest", "primary"],
+                        help="Tie-break when timestamps are missing: 'freshest' prefers secondary, 'primary' prefers primary")
     parser.add_argument("--output", required=True, help="Path for results JSON output")
     parser.add_argument("--platform", default="auto", help="Platform override (shopify, wordpress, etc.)")
     args = parser.parse_args()
 
-    # Load CSV
-    print(f"Loading {args.input}...")
+    # Load primary CSV
+    print(f"Loading primary: {args.input}...")
     df = pd.read_csv(args.input, low_memory=False)
     print(f"Loaded {len(df)} rows with {len(df.columns)} columns")
 
-    # Detect tool and normalise
-    tool = detect_tool(df.columns.tolist())
-    print(f"Detected tool: {tool}")
-    df = normalise_columns(df, tool)
+    # Detect tool and normalise primary
+    primary_tool = detect_tool(df.columns.tolist())
+    print(f"Detected primary tool: {primary_tool}")
+    df = normalise_columns(df, primary_tool)
+
+    # Optionally load and merge secondary source
+    merge_report = None
+    if args.secondary:
+        print(f"\nLoading secondary: {args.secondary}...")
+        ext = Path(args.secondary).suffix.lower()
+        if ext == ".json":
+            with open(args.secondary) as f:
+                secondary_raw = json.load(f)
+            # Assume JSON is a list of dicts (e.g. from Firecrawl normalisation)
+            df2 = pd.DataFrame(secondary_raw)
+            secondary_tool = "api_json"
+        else:
+            df2 = pd.read_csv(args.secondary, low_memory=False)
+            secondary_tool = detect_tool(df2.columns.tolist())
+            df2 = normalise_columns(df2, secondary_tool)
+
+        print(f"Detected secondary tool: {secondary_tool}")
+        print(f"Secondary: {len(df2)} rows with {len(df2.columns)} columns")
+
+        print(f"\nMerging datasets (strategy={args.merge_strategy})...")
+        df, merge_report = merge_datasets(
+            df, df2,
+            primary_tool=primary_tool,
+            secondary_tool=secondary_tool,
+            strategy=args.merge_strategy,
+        )
+        print(f"Merge complete:")
+        print(f"  Primary-only URLs:   {merge_report['primary_only_urls']}")
+        print(f"  Secondary-only URLs: {merge_report['secondary_only_urls']}")
+        print(f"  Overlapping URLs:    {merge_report['overlap_urls']}")
+        print(f"  Merged total:        {merge_report['merged_total_urls']}")
 
     # Run audit
-    print("Running full audit...")
+    print("\nRunning full audit...")
     results = run_full_audit(df, platform=args.platform)
+
+    # Attach merge report if applicable
+    if merge_report:
+        results["merge_report"] = merge_report
 
     # Save results
     with open(args.output, "w") as f:
         json.dump(results, f, indent=2, default=str)
-    print(f"Results saved to {args.output}")
+    print(f"\nResults saved to {args.output}")
     print(f"Overall health score: {results['overall_health_score']}/100")
     print(f"Platform: {results['platform']}")
     print(f"Site type: {results['site_type']}")
