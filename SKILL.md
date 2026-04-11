@@ -49,6 +49,37 @@ Supported tools and their typical file patterns:
 
 **Column auto-detection**: Read `references/data-ingestion.md` for the complete column mapping logic. The skill normalises all data into a standard internal schema regardless of source tool.
 
+#### Step 0: Large File Detection (ALWAYS do this first)
+
+Before reading any CSV, check its size:
+```bash
+ls -lh /path/to/file.csv
+```
+
+**If the file is larger than 5MB**, do NOT attempt to read it directly — this will crash the context window. This applies regardless of which crawl tool produced the file.
+
+Instead, use the pre-processing path:
+
+1. Check if `audit_summary.json` already exists in the same folder as the CSV:
+   - If **yes**: skip to "Using pre-processed data" below — the heavy lifting is already done.
+   - If **no**: run the appropriate pre-processor for the detected tool:
+     - **Ahrefs, Screaming Frog, or Sitebulb**:
+       ```bash
+       python3 ~/.claude/skills/technical-seo-audit/scripts/preprocess.py --input /path/to/file.csv
+       ```
+     - **Other / unknown tools**: ask the user to export a smaller slice (e.g. filter to HTML pages only before exporting).
+
+     The pre-processor takes ~10-30 seconds. It writes `audit_summary.json` and an `issues/` folder in the same directory as the CSV.
+
+2. **Using pre-processed data** (replaces direct CSV reading for the rest of the skill):
+   - Read `audit_summary.json` — this contains all aggregate statistics across all 10 audit categories.
+   - Read specific `issues/<issue_name>.csv` files as needed for URL-level detail (each is small and safe to read).
+   - Do **not** read the raw CSV or slim.csv — they are not needed.
+   - Skip Phase 3's `analyse_crawl.py` call — the pre-processor has already performed the full analysis.
+   - Proceed directly from `audit_summary.json` data into Phase 4 (impact scoring) and Phase 5 (output generation).
+
+**If the file is 5MB or smaller**, read it directly as normal:
+
 When receiving files:
 1. Read the CSV headers first
 2. Match against known tool signatures (see reference file)
