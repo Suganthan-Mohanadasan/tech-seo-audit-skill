@@ -115,7 +115,7 @@ def detect_tool(headers):
         return "screaming_frog"
     if "URL" in header_set and "Indexable" in header_set and "Address" not in header_set:
         return "sitebulb"
-    if "URL" in header_set and "HTTP Code" in header_set:
+    if "URL" in header_set and "HTTP status code" in header_set:
         return "ahrefs"
     return "unknown"
 
@@ -134,10 +134,38 @@ def normalise_columns(df, tool):
             df["response_time"] = pd.to_numeric(df["response_time"], errors="coerce") / 1000
     elif tool == "ahrefs":
         df = df.rename(columns={
-            "URL": "url", "HTTP Code": "status_code", "Title": "title",
-            "Description": "meta_description", "H1": "h1",
-            "Canonical URL": "canonical", "Word Count": "word_count",
-            "Internal Links In": "inlinks", "Depth": "crawl_depth",
+            "URL": "url",
+            "HTTP status code": "status_code",
+            "Title": "title",
+            "Meta description": "meta_description",
+            "H1": "h1",
+            "H2": "h2",
+            "Content type": "content_type",
+            "Is indexable page": "indexable",
+            "Canonical URL": "canonical",
+            "Canonical URL code": "canonical_status_code",
+            "No. of content words": "word_count",
+            "No. of href inlinks": "inlinks",
+            "No. of inlinks dofollow": "inlinks_dofollow",
+            "No. of inlinks nofollow": "inlinks_nofollow",
+            "Depth": "crawl_depth",
+            "Organic traffic": "organic_traffic",
+            "Redirect URL": "redirect_url",
+            "Redirect URL code": "redirect_status_code",
+            "Redirect chain URLs": "redirect_chain",
+            "Is redirect loop": "redirect_loop",
+            "Size (bytes)": "page_size_bytes",
+            "Time to first byte (ms)": "ttfb_ms",
+            "Loading time (ms)": "load_time_ms",
+            "Content hash": "content_hash",
+            "No. of pages having the same content": "duplicate_count",
+            "Referenced in sitemaps": "in_sitemap",
+            "Schema items": "schema_items",
+            "Structured data issues": "structured_data_issues",
+            "Linked images without alt attribute": "images_no_alt",
+            "Meta robots": "meta_robots",
+            "No. of canonical inlinks": "canonical_inlinks",
+            "No. of hreflang inlinks": "hreflang_inlinks",
         })
     return df
 

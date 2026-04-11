@@ -139,18 +139,41 @@ Page Size -> page_size_bytes
 
 ### Ahrefs Site Audit (pages.csv)
 
-Detection signature: Headers contain "URL" AND "HTTP Code"
+Detection signature: Headers contain "URL" AND "HTTP status code"
 
 ```
 URL -> url
-HTTP Code -> status_code
+HTTP status code -> status_code
 Title -> title
-Description -> meta_description
+Meta description -> meta_description
 H1 -> h1
+H2 -> h2
+Content type -> content_type
+Is indexable page -> indexable
 Canonical URL -> canonical
-Word Count -> word_count
-Internal Links In -> inlinks
+Canonical URL code -> canonical_status_code
+No. of content words -> word_count
+No. of href inlinks -> inlinks
+No. of inlinks dofollow -> inlinks_dofollow
+No. of inlinks nofollow -> inlinks_nofollow
 Depth -> crawl_depth
+Organic traffic -> organic_traffic
+Redirect URL -> redirect_url
+Redirect URL code -> redirect_status_code
+Redirect chain URLs -> redirect_chain
+Is redirect loop -> redirect_loop
+Size (bytes) -> page_size_bytes
+Time to first byte (ms) -> ttfb_ms
+Loading time (ms) -> load_time_ms
+Content hash -> content_hash
+No. of pages having the same content -> duplicate_count
+Referenced in sitemaps -> in_sitemap
+Schema items -> schema_items
+Structured data issues -> structured_data_issues
+Linked images without alt attribute -> images_no_alt
+Meta robots -> meta_robots
+No. of canonical inlinks -> canonical_inlinks
+No. of hreflang inlinks -> hreflang_inlinks
 ```
 
 ### Generic CSV / Unknown Tool

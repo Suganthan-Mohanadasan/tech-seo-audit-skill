@@ -44,7 +44,7 @@ Supported tools and their typical file patterns:
 |------|--------------|-------------|
 | Screaming Frog | `internal_html.csv`, `internal_all.csv`, `all_inlinks.csv`, `all_outlinks.csv`, `response_codes.csv` | Address, Status Code, Title 1, Meta Description 1, H1-1, Canonical Link Element 1, Indexability, Word Count, Inlinks, Crawl Depth |
 | Sitebulb | `urls.csv`, `links.csv`, `hints.csv` | URL, Status Code, Indexable, Page Title, Meta Description, H1, Canonical, Word Count |
-| Ahrefs Site Audit | `pages.csv`, `issues.csv` | URL, HTTP Code, Title, Description, H1, Canonical URL, Word Count |
+| Ahrefs Site Audit | `pages.csv`, `issues.csv` | URL, HTTP status code, Title, Meta description, H1, Canonical URL, No. of content words, Depth, Is indexable page, Organic traffic |
 | Other / Generic CSV | Any CSV with URL + status data | Auto-detect columns by header matching |
 
 **Column auto-detection**: Read `references/data-ingestion.md` for the complete column mapping logic. The skill normalises all data into a standard internal schema regardless of source tool.
